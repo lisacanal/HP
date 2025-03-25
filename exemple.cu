@@ -264,87 +264,194 @@
 //     return 0;
 // }
 
+// #define STB_IMAGE_IMPLEMENTATION
+// #define STB_IMAGE_WRITE_IMPLEMENTATION
+
+// #include "stb_image.h"
+// #include "stb_image_write.h"
+// #include <stdlib.h>
+// #include <math.h>
+// #include <stdio.h>
+// #include <cuda_runtime.h>
+
+// // Fonction gaussienne
+// __device__ float calcul_gaussien(float distance, float ecart_type) {
+//     return expf(-(distance * distance) / (2.0f * ecart_type * ecart_type));
+// }
+
+// // Filtre bilatéral en CUDA
+// __global__ void filtre_bilateral_cuda(unsigned char *entree, unsigned char *sortie, int largeur, int hauteur, int canaux, int taille_fenetre, float sigma_couleur, float sigma_espace) {
+//     int coord_x = blockIdx.x * blockDim.x + threadIdx.x;
+//     int coord_y = blockIdx.y * blockDim.y + threadIdx.y;
+
+//     if (coord_x >= largeur || coord_y >= hauteur) return;
+
+//     int rayon = taille_fenetre / 2;
+
+//     float somme_valeurs[3] = {0.0f, 0.0f, 0.0f};
+//     float somme_poids[3] = {0.0f, 0.0f, 0.0f};
+
+//     unsigned char *pixel_central = entree + (coord_y * largeur + coord_x) * canaux;
+
+//     for (int dy = -rayon; dy <= rayon; dy++) {
+//         for (int dx = -rayon; dx <= rayon; dx++) {
+//             int voisin_x = coord_x + dx;
+//             int voisin_y = coord_y + dy;
+
+//             if (voisin_x >= 0 && voisin_x < largeur && voisin_y >= 0 && voisin_y < hauteur) {
+//                 unsigned char *pixel_voisin = entree + (voisin_y * largeur + voisin_x) * canaux;
+
+//                 for (int c = 0; c < canaux; c++) {
+//                     float poids_spatial = calcul_gaussien(sqrtf((float)(dx * dx + dy * dy)), sigma_espace);
+//                     float poids_couleur = calcul_gaussien(fabsf((float)pixel_voisin[c] - (float)pixel_central[c]), sigma_couleur);
+//                     float poids_total = poids_spatial * poids_couleur;
+
+//                     somme_valeurs[c] += pixel_voisin[c] * poids_total;
+//                     somme_poids[c] += poids_total;
+//                 }
+//             }
+//         }
+//     }
+
+//     unsigned char *pixel_sortie = sortie + (coord_y * largeur + coord_x) * canaux;
+//     for (int c = 0; c < canaux; c++) {
+//         pixel_sortie[c] = (unsigned char)(somme_valeurs[c] / (somme_poids[c] + 1e-6f));
+//     }
+// }
+
+// // Fonction principale
+// int main(int argc, char *argv[]) {
+//     if (argc < 3) {
+//         printf("Usage: %s <image_entree> <image_sortie>\n", argv[0]);
+//         return 1;
+//     }
+
+//     int largeur, hauteur, canaux;
+//     unsigned char *image_entree = stbi_load(argv[1], &largeur, &hauteur, &canaux, 0);
+//     if (!image_entree) {
+//         printf("Erreur lors du chargement de l’image !\n");
+//         return 1;
+//     }
+
+//     unsigned char *image_filtrée = (unsigned char *)malloc(largeur * hauteur * canaux);
+
+//     unsigned char *gpu_entree, *gpu_sortie;
+//     cudaMalloc(&gpu_entree, largeur * hauteur * canaux);
+//     cudaMalloc(&gpu_sortie, largeur * hauteur * canaux);
+
+//     cudaMemcpy(gpu_entree, image_entree, largeur * hauteur * canaux, cudaMemcpyHostToDevice);
+
+//     dim3 taille_bloc(16, 16);
+//     dim3 taille_grille(32, 32);
+//     //dim3 taille_grille((largeur + taille_bloc.x - 1) / taille_bloc.x, (hauteur + taille_bloc.y - 1) / taille_bloc.y);
+
+//     filtre_bilateral_cuda<<<taille_grille, taille_bloc>>>(gpu_entree, gpu_sortie, largeur, hauteur, canaux, 5, 15.0f, 5.0f);
+//     cudaDeviceSynchronize();
+// }
+
+
+
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-
+ 
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
 #include <cuda_runtime.h>
-
-// Fonction gaussienne
-__device__ float calcul_gaussien(float distance, float ecart_type) {
-    return expf(-(distance * distance) / (2.0f * ecart_type * ecart_type));
+ 
+// Gaussian function
+__device__ float gaussian(float x, float sigma) {
+    return expf(-(x * x) / (2.0f * sigma * sigma));
 }
-
-// Filtre bilatéral en CUDA
-__global__ void filtre_bilateral_cuda(unsigned char *entree, unsigned char *sortie, int largeur, int hauteur, int canaux, int taille_fenetre, float sigma_couleur, float sigma_espace) {
-    int coord_x = blockIdx.x * blockDim.x + threadIdx.x;
-    int coord_y = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (coord_x >= largeur || coord_y >= hauteur) return;
-
-    int rayon = taille_fenetre / 2;
-
-    float somme_valeurs[3] = {0.0f, 0.0f, 0.0f};
-    float somme_poids[3] = {0.0f, 0.0f, 0.0f};
-
-    unsigned char *pixel_central = entree + (coord_y * largeur + coord_x) * canaux;
-
-    for (int dy = -rayon; dy <= rayon; dy++) {
-        for (int dx = -rayon; dx <= rayon; dx++) {
-            int voisin_x = coord_x + dx;
-            int voisin_y = coord_y + dy;
-
-            if (voisin_x >= 0 && voisin_x < largeur && voisin_y >= 0 && voisin_y < hauteur) {
-                unsigned char *pixel_voisin = entree + (voisin_y * largeur + voisin_x) * canaux;
-
-                for (int c = 0; c < canaux; c++) {
-                    float poids_spatial = calcul_gaussien(sqrtf((float)(dx * dx + dy * dy)), sigma_espace);
-                    float poids_couleur = calcul_gaussien(fabsf((float)pixel_voisin[c] - (float)pixel_central[c]), sigma_couleur);
-                    float poids_total = poids_spatial * poids_couleur;
-
-                    somme_valeurs[c] += pixel_voisin[c] * poids_total;
-                    somme_poids[c] += poids_total;
+ 
+ 
+// CUDA bilateral filter kernel
+__global__ void bilateral_filter_cuda(unsigned char *src, unsigned char *dst, int width, int height, int channels, int d, float sigma_color, float sigma_space) {
+    //Chaque thread CUDA s’occupe d’un pixel unique
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+ 
+    if (x >= width || y >= height) return;
+ 
+    int radius = d / 2;
+ 
+    float filtered_value[3] = {0.0f, 0.0f, 0.0f};
+    float weight_sum[3] = {0.0f, 0.0f, 0.0f};
+ 
+    unsigned char *center_pixel = src + (y * width + x) * channels;
+ 
+    for (int i = -radius; i <= radius; i++) {
+        for (int j = -radius; j <= radius; j++) {
+            int nx = x + j;
+            int ny = y + i;
+ 
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                unsigned char *neighbor_pixel = src + (ny * width + nx) * channels;
+ 
+                for (int c = 0; c < channels; c++) {
+                    float spatial_weight = gaussian(sqrtf((float)(i * i + j * j)), sigma_space);
+                    float range_weight = gaussian(fabsf((float)neighbor_pixel[c] - (float)center_pixel[c]), sigma_color);
+                    float weight = spatial_weight * range_weight;
+ 
+                    filtered_value[c] += neighbor_pixel[c] * weight;
+                    weight_sum[c] += weight;
                 }
             }
         }
     }
-
-    unsigned char *pixel_sortie = sortie + (coord_y * largeur + coord_x) * canaux;
-    for (int c = 0; c < canaux; c++) {
-        pixel_sortie[c] = (unsigned char)(somme_valeurs[c] / (somme_poids[c] + 1e-6f));
+ 
+    unsigned char *output_pixel = dst + (y * width + x) * channels;
+    for (int c = 0; c < channels; c++) {
+        output_pixel[c] = (unsigned char)(filtered_value[c] / (weight_sum[c] + 1e-6f));
     }
 }
-
-// Fonction principale
+ 
+// Main function
 int main(int argc, char *argv[]) {
     if (argc < 3) {
-        printf("Usage: %s <image_entree> <image_sortie>\n", argv[0]);
+        printf("Usage: %s <input_image> <output_image>\n", argv[0]);
         return 1;
     }
-
-    int largeur, hauteur, canaux;
-    unsigned char *image_entree = stbi_load(argv[1], &largeur, &hauteur, &canaux, 0);
-    if (!image_entree) {
-        printf("Erreur lors du chargement de l’image !\n");
+ 
+    int width, height, channels;
+    unsigned char *image = stbi_load(argv[1], &width, &height, &channels, 0);
+    if (!image) {
+        printf("Error loading image!\n");
         return 1;
     }
-
-    unsigned char *image_filtrée = (unsigned char *)malloc(largeur * hauteur * canaux);
-
-    unsigned char *gpu_entree, *gpu_sortie;
-    cudaMalloc(&gpu_entree, largeur * hauteur * canaux);
-    cudaMalloc(&gpu_sortie, largeur * hauteur * canaux);
-
-    cudaMemcpy(gpu_entree, image_entree, largeur * hauteur * canaux, cudaMemcpyHostToDevice);
-
-    dim3 taille_bloc(16, 16);
-    dim3 taille_grille(32, 32);
-    //dim3 taille_grille((largeur + taille_bloc.x - 1) / taille_bloc.x, (hauteur + taille_bloc.y - 1) / taille_bloc.y);
-
-    filtre_bilateral_cuda<<<taille_grille, taille_bloc>>>(gpu_entree, gpu_sortie, largeur, hauteur, canaux, 5, 15.0f, 5.0f);
+ 
+    unsigned char *filtered_image = (unsigned char *)malloc(width * height * channels);
+ 
+    unsigned char *d_src, *d_dst;
+    cudaMalloc(&d_src, width * height * channels);
+    cudaMalloc(&d_dst, width * height * channels);
+ 
+    cudaMemcpy(d_src, image, width * height * channels, cudaMemcpyHostToDevice);
+ 
+    dim3 blockSize(16, 16);
+    dim3 gridSize(32,32);
+    //dim3 gridSize((width + blockSize.x - 1) / blockSize.x, (height + blockSize.y - 1) / blockSize.y);
+ 
+    bilateral_filter_cuda<<<gridSize, blockSize>>>(d_src, d_dst, width, height, channels, 5, 15.0f, 5.0f);
+    cudaDeviceSynchronize();  // attend la fin du kernel
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("CUDA error after kernel launch: %s\n", cudaGetErrorString(err));
+    }
+    
     cudaDeviceSynchronize();
+ 
+    cudaMemcpy(filtered_image, d_dst, width * height * channels, cudaMemcpyDeviceToHost);
+ 
+    stbi_write_png(argv[2], width, height, channels, filtered_image, width * channels);
+ 
+    cudaFree(d_src);
+    cudaFree(d_dst);
+    stbi_image_free(image);
+    free(filtered_image);
+ 
+    printf("CUDA bilateral filter complete. Output saved as %s\n", argv[2]);
+    return 0;
 }
