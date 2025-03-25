@@ -347,3 +347,4 @@ int main(int argc, char *argv[]) {
 
     filtre_bilateral_cuda<<<taille_grille, taille_bloc>>>(gpu_entree, gpu_sortie, largeur, hauteur, canaux, 5, 15.0f, 5.0f);
     cudaDeviceSynchronize();
+}
