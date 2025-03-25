@@ -453,5 +453,6 @@ int main(int argc, char *argv[]) {
     free(filtered_image);
  
     printf("CUDA bilateral filter complete. Output saved as %s\n", argv[2]);
+    printf("OK");
     return 0;
 }
